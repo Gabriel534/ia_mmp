@@ -1,0 +1,7 @@
+services:
+  receiver-api:
+    build: .
+    container_name: receiver-api
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
