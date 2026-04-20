@@ -136,40 +136,38 @@ Todas as métricas devem ser enviadas via `POST /ask` no corpo da requisição (
 
 ## 🚀 Como Usar
 
-### 1. Subir com Docker
+### 1. Subir com Docker dependências dos projetos ia_mmp e app_mmp
 
 ```bash
 docker compose up --build
 ```
 
-### 2. Verificar saúde da API
+### 2. Conectar redes de ambos os projetos
+```bash
+docker network connect app_mmp_default ia-api
+```
+
+### 3. Verificar saúde da API
 
 ```bash
 curl http://localhost:8000/healthz
 ```
 
-### 3. Ingerir dados do banco
+### 4. Ingerir dados do banco
 
 ```bash
-curl -X POST http://localhost:8000/ingest
+curl.exe -X POST http://localhost:8000/ingest
 ```
 
-### 4. Fazer pergunta com métricas do estudante
+### 5. Fazer pergunta com métricas do estudante
 
 ```bash
-curl -X POST http://localhost:8000/ask \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "Como devo estudar cálculo?",
-    "context": null
-  }'
+curl.exe -X POST http://localhost:8000/ask -H "Content-Type: application/json" -d '{"question": "Como devo estudar cálculo?", "context": null}'
 ```
 
 **Com métricas (quando implementado):**
 ```bash
-curl -X POST http://localhost:8000/ask \
-  -H "Content-Type: application/json" \
-  -d '{
+curl.exe -X POST http://localhost:8000/ask -H "Content-Type: application/json" -d '{
     "question": "Como devo estudar cálculo?",
     "student_metrics": {
       "id_aluno": 1,
@@ -189,7 +187,7 @@ Variáveis de ambiente (`.env`):
 ```env
 # LLM
 GROQ_API_KEY=sua_chave_aqui
-LLM_MODEL=mixtral-8x7b-32768
+LLM_MODEL=llama-3.3-70b-versatile
 
 # Database MySQL
 DB_HOST=localhost
@@ -204,7 +202,7 @@ QDRANT_PORT=6333
 QDRANT_COLLECTION=documentos
 
 # Embeddings
-EMBEDDINGS_MODEL=sentence-transformers/all-MiniLM-L6-v2
+EMBEDDINGS_MODEL=sentence-transformers/all-mpnet-base-v2
 
 # RAG
 CHUNK_SIZE=1000
