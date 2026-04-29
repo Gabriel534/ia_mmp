@@ -1,7 +1,6 @@
 from typing import Any
-from pydantic import BaseModel, Field
-from groq import BaseModel
 
+from pydantic import BaseModel, Field
 
 class AskPayload(BaseModel):
     student_metrics: dict[str, Any] | None = None
