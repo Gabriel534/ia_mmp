@@ -1,54 +1,53 @@
-# API Educacional com Busca SQL
+# API Educacional com Rotas Estruturadas
 
-API em FastAPI para recomendacao educacional personalizada. A aplicacao recebe a pergunta do estudante, gera consultas `SELECT` seguras com LLM, busca contexto no MySQL e usa esses resultados para montar a resposta final.
+API em FastAPI para gerar rotas educacionais personalizadas. A aplicacao continua usando LLM para gerar consultas SQL seguras, mas agora separa claramente:
+
+- recuperacao de contexto via SQL;
+- inferencia pedagogica auditavel em Python;
+- resposta estruturada com schema Pydantic;
+- renderizacao textual opcional da rota.
 
 ## Arquitetura atual
 
-- FastAPI para expor a API
-- LangChain Core para orquestrar o pipeline
-- Groq como provedor do modelo
-- MySQL como fonte de dados dos recursos educacionais
-- Docker e Docker Compose para execucao local
+- FastAPI para exposicao da API
+- LangChain + Groq para geracao das queries SQL
+- MySQL como fonte de recursos educacionais
+- `LearningRoute` como objeto central da resposta
+- Heuristicas em Python para diagnostico, ritmo e montagem da trilha
 
-## Fluxo da resposta
+## Fluxo
 
-1. O cliente envia uma pergunta para `POST /ask`.
-2. O `RagService` gera ate uma query SQL por categoria:
+1. O cliente envia pergunta e metricas para `POST /routes/generate`.
+2. A LLM gera ate uma query por categoria:
    - `videos_query`
    - `literature_query`
    - `disciplines_query`
-3. O `DatabaseRepository` valida e saneia cada query:
-   - permite apenas `SELECT`
-   - bloqueia comandos destrutivos
-   - restringe o acesso as tabelas `videos`, `literature` e `disciplines`
-   - garante `LIMIT`
-4. Os resultados retornados pelo MySQL viram contexto para o LLM responder.
-
-## Estrutura de dados esperada
-
-O banco deve conter as tabelas abaixo:
-
-- `videos`
-- `literature`
-- `disciplines`
-
-O diretorio [`data`](/C:/Users/Usuario/Documents/ia_mmp/data) contem arquivos CSV e scripts SQL de carga, como:
-
-- [`data/insert_videos.sql`](/C:/Users/Usuario/Documents/ia_mmp/data/insert_videos.sql)
-- [`data/insert_literature.sql`](/C:/Users/Usuario/Documents/ia_mmp/data/insert_literature.sql)
-- [`data/insert_disciplines.sql`](/C:/Users/Usuario/Documents/ia_mmp/data/insert_disciplines.sql)
+3. O repositorio valida e executa apenas `SELECT` com tabelas permitidas.
+4. O `LearningRouteBuilder` transforma metrica + recursos em uma rota tipada.
+5. O cliente pode:
+   - consumir o JSON estruturado;
+   - chamar `POST /routes/explain` para obter a versao textual;
+   - continuar usando `POST /ask` como endpoint legado.
 
 ## Endpoints
 
 ### `GET /healthz`
 
-Retorna o status da API.
+Status basico da API.
 
-### `POST /ask`
+### `GET /healthz/live`
 
-Recebe a pergunta do estudante e metricas opcionais para personalizar a recomendacao.
+Liveness check.
 
-Exemplo de payload:
+### `GET /healthz/ready`
+
+Readiness check com verificacao de configuracao e banco.
+
+### `POST /routes/generate`
+
+Gera a rota estruturada.
+
+Exemplo:
 
 ```json
 {
@@ -62,17 +61,55 @@ Exemplo de payload:
 }
 ```
 
-Exemplo de resposta:
+Resposta resumida:
 
 ```json
 {
-  "answer": "..."
+  "route": {
+    "question": "Como devo estudar calculo?",
+    "diagnosis": {
+      "risk_score": 72,
+      "general_readiness_score": 41,
+      "mathematical_foundation_score": 33,
+      "autonomy_score": 28,
+      "support_level": "alta",
+      "starting_level": "fundamentos e prerequisitos",
+      "pace": "passos curtos com checkpoints frequentes",
+      "confidence_note": "As decisoes foram inferidas diretamente das metricas recebidas.",
+      "summary": "..."
+    },
+    "stages": [],
+    "checkpoints": [],
+    "alternative_plan": {},
+    "prioritized_resources": {},
+    "generated_queries": {
+      "videos_query": "SELECT ...",
+      "literature_query": "SELECT ...",
+      "disciplines_query": "SELECT ..."
+    }
+  }
 }
 ```
 
+### `POST /routes/explain`
+
+Recebe um objeto `LearningRoute` e devolve a versao textual.
+
+### `POST /ask`
+
+Endpoint legado. Internamente ele gera a rota e devolve o texto renderizado.
+
+## Estrutura esperada no banco
+
+- `videos`
+- `literature`
+- `disciplines`
+
+Os arquivos em [`data`](/C:/Users/Usuario/Documents/ia_mmp/data) ja estao em UTF-8. A aplicacao trata normalizacao textual no fluxo de recomendacao.
+
 ## Variaveis de ambiente
 
-Use o arquivo [`.env.example`](/C:/Users/Usuario/Documents/ia_mmp/.env.example) como base.
+Use [`.env.example`](/C:/Users/Usuario/Documents/ia_mmp/.env.example) como base.
 
 ```env
 GROQ_API_KEY=your_groq_api_key_here
@@ -82,24 +119,32 @@ DB_USER=app_mmp
 DB_PASS=app_mmp
 DB_NAME=db_mmp
 LLM_MODEL=llama-3.3-70b-versatile
+LLM_TIMEOUT_SECONDS=30
+LLM_MAX_RETRIES=2
 SQL_SEARCH_LIMIT=9
+DB_CONNECT_TIMEOUT_SECONDS=5
 DEBUG=False
 LOG_LEVEL=INFO
 ```
 
-## Execucao
+## Testes
 
-Suba a API com:
+Os testes cobrem:
+
+- validacao dos payloads;
+- sanitizacao SQL;
+- heuristica de montagem de rota;
+- renderizacao textual;
+- tratamento de erro HTTP.
+
+Execucao:
+
+```bash
+pytest
+```
+
+## Execucao com Docker
 
 ```bash
 docker compose up --build
-```
-
-Observacao: o `docker-compose.yml` usa a rede externa `app_mmp_default`, entao ela precisa existir e o MySQL precisa estar acessivel pelos parametros definidos no `.env`.
-
-## Testes rapidos
-
-```bash
-curl http://localhost:8000/healthz
-curl.exe -X POST http://localhost:8000/ask -H "Content-Type: application/json" -d "{\"question\":\"Como devo estudar calculo?\"}"
 ```
