@@ -1,11 +1,17 @@
 import os
 import re
+import logging
 from collections.abc import Iterable
 
 import mysql.connector
 from dotenv import load_dotenv
 
+from app.core.config import DB_CONNECT_TIMEOUT_SECONDS
+from app.core.errors import DependencyAppError, SQLExecutionError
+
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseRepository:
@@ -32,11 +38,12 @@ class DatabaseRepository:
                 user=os.getenv("DB_USER"),
                 password=os.getenv("DB_PASS"),
                 database=os.getenv("DB_NAME"),
+                connection_timeout=DB_CONNECT_TIMEOUT_SECONDS,
             )
         except mysql.connector.Error as exc:
-            raise ConnectionError(f"Erro ao conectar no banco de dados MySQL: {exc}") from exc
+            raise DependencyAppError(f"Erro ao conectar no banco de dados MySQL: {exc}") from exc
         except ValueError as exc:
-            raise ValueError(f"Configuracao invalida do banco de dados: {exc}") from exc
+            raise DependencyAppError(f"Configuracao invalida do banco de dados: {exc}") from exc
 
     def test_connection(self) -> bool:
         try:
@@ -44,7 +51,20 @@ class DatabaseRepository:
             connection.close()
             return True
         except Exception as exc:
-            raise ConnectionError(f"Falha na conexao com o banco de dados: {exc}") from exc
+            raise DependencyAppError(f"Falha na conexao com o banco de dados: {exc}") from exc
+
+    def readiness(self) -> dict[str, bool]:
+        database_ready = False
+        try:
+            database_ready = self.test_connection()
+        except DependencyAppError:
+            logger.warning("database_readiness_check_failed")
+
+        return {
+            "database": database_ready,
+            "db_host_configured": bool(os.getenv("DB_HOST")),
+            "db_name_configured": bool(os.getenv("DB_NAME")),
+        }
 
     def execute_resource_queries(self, queries: dict[str, str | None], limit: int) -> dict[str, list[dict]]:
         self.test_connection()
@@ -55,6 +75,7 @@ class DatabaseRepository:
                 results[key] = []
                 continue
             sanitized_query = self._sanitize_select_query(query=query, limit=limit)
+            logger.info("executing_resource_query key=%s query=%s", key, sanitized_query)
             results[key] = self._fetch_rows(sanitized_query)
 
         return results
@@ -67,6 +88,8 @@ class DatabaseRepository:
             cursor = connection.cursor(dictionary=True)
             cursor.execute(query, params or ())
             return list(cursor.fetchall())
+        except mysql.connector.Error as exc:
+            raise SQLExecutionError(f"Falha ao executar query SQL: {exc}") from exc
         finally:
             if cursor is not None:
                 cursor.close()
